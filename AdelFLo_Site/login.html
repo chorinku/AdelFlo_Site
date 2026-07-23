@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AdelFlo · 관리자 로그인</title>
+<style>
+  :root{
+   --paper:#F5F5F7;
+   --paper-deep:#E8E8ED;
+   --card:#FFFFFF;
+   --ink:#1D1D1F;
+   --ink-soft:#6E6E73;
+   --line:#D2D2D7;
+   --pine:#4F46E5;
+   --pine-deep:#312E81;
+   --clay:#7C3AED;
+   --clay-soft:#C4B5FD;
+    --shadow: 0 10px 30px -14px rgba(47,40,25,0.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{ height:100%; }
+  body{
+    margin:0; font-family: Arial, sans-serif; color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    background:
+      radial-gradient(1000px 500px at 10% -10%, rgba(177,113,88,0.10), transparent),
+      radial-gradient(1000px 500px at 100% 10%, rgba(67,84,58,0.10), transparent),
+      var(--paper);
+    padding:20px;
+  }
+  .login-card{
+    width:100%; max-width:360px;
+    background:var(--card); border:1px solid var(--line); border-radius:18px;
+    padding:36px 32px; box-shadow:0 20px 40px -18px rgba(47,40,25,0.4);
+    text-align:center;
+  }
+  .login-card h1{
+    font-size:22px; margin:0 0 2px; color:var(--pine-deep);
+  }
+  .login-card .site-name{
+    font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:var(--clay);
+    font-weight:bold; margin-bottom:18px;
+  }
+  label{
+    display:block; text-align:left; font-size:12.5px; font-weight:bold;
+    color:var(--ink-soft); margin-bottom:6px;
+  }
+  input[type=password]{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:14px; font-family:inherit; background:#fff; color:var(--ink); margin-bottom:16px;
+  }
+  input[type=password]:focus{ outline:none; border-color:var(--clay); }
+  button{
+    width:100%; padding:12px; border:none; border-radius:9px; background:var(--pine); color:#fff;
+    font-weight:bold; font-size:14px; cursor:pointer;
+  }
+  button:hover{ background:var(--pine-deep); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .msg{
+    margin-top:14px; font-size:12.5px; min-height:16px; color:#b04a3a;
+  }
+  .back{
+    display:inline-block; margin-top:20px; font-size:12px; color:var(--ink-soft); text-decoration:none;
+  }
+  .back:hover{ color:var(--clay); }
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="site-name">AdelFlo</div>
+    <h1>관리자 로그인</h1>
+    <form id="login-form">
+      <label for="pw">비밀번호</label>
+      <input type="password" id="pw" autocomplete="current-password" autofocus>
+      <button type="submit" id="login-btn">로그인</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <a class="back" href="./index.html">← 갤러리로 돌아가기</a>
+  </div>
+
+<script>
+// worker.js를 배포한 주소를 넣어주세요. 예: "https://adelflo-api.yourname.workers.dev"
+const API_BASE = "https://adelflo-worker.0chorinku0.workers.dev";
+
+const form = document.getElementById('login-form');
+const pwInput = document.getElementById('pw');
+const loginBtn = document.getElementById('login-btn');
+const msg = document.getElementById('msg');
+
+if(!API_BASE){
+  msg.textContent = "API_BASE가 설정되지 않았습니다. login.html 상단의 API_BASE 값을 Worker 주소로 채워주세요.";
+  loginBtn.disabled = true;
+}
+
+// 이미 로그인되어 있다면 바로 관리자 페이지로
+if(sessionStorage.getItem('adelflo_admin_pw')){
+  location.href = './admin.html';
+}
+
+form.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const pw = pwInput.value;
+  if(!pw) return;
+
+  loginBtn.disabled = true;
+  msg.textContent = "확인 중...";
+
+  try{
+    const res = await fetch(`${API_BASE}/api/verify`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${pw}` }
+    });
+    if(res.status === 401){
+      msg.textContent = "비밀번호가 올바르지 않습니다.";
+      loginBtn.disabled = false;
+      return;
+    }
+    if(!res.ok){
+      msg.textContent = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+      loginBtn.disabled = false;
+      return;
+    }
+    sessionStorage.setItem('adelflo_admin_pw', pw);
+    location.href = './admin.html';
+  }catch(err){
+    msg.textContent = "서버에 연결할 수 없습니다: " + err.message;
+    loginBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

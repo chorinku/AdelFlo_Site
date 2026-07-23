@@ -172,8 +172,7 @@
     },
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/Original/AF25.png",
-      "desc": "테마곡 CD",
-      "extra": ""
+      "desc": "테마곡 CD"
     },
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/Original/AF29.png",
@@ -234,13 +233,7 @@
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/Original/AF44.jpg",
       "desc": "좋은 느낌",
       "extra": "이 조온습이 좋다<br><br>한달수님 커미션 (크레페 @jTV6xeEc)"
-    },
-    {
-      "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/Original/AF.png",
-      "desc": "",
-      "extra": ""
-    }
-  ],
+    }],
   "2": [
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/BeforeTheWorld/BTW_18.png",
@@ -374,13 +367,7 @@
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/BeforeTheWorld/BTW_28.png",
       "desc": "완성하겠지",
       "extra": "언젠가 완성하겠지"
-    },
-    {
-      "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/BeforeTheWorld/BTW_.png",
-      "desc": "",
-      "extra": ""
-    }
-  ],
+    } ],
   "3": [
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/HardMode/HardMode_19.png",
@@ -507,14 +494,14 @@
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/HardMode/HardMode_24.jpg",
       "desc": "1회차",
       "extra": "여기에서 재밌지로 변한 건 그만큼 관심이 생겼다는 뜻이겠지"
-    },
-    {
-      "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/HardMode/HardMode_.png",
-      "desc": "",
-      "extra": ""
+    }],
+  "4": [{
+      "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/LUX_Project/%EB%AC%B4%EC%A0%9C537_20260420232232.png",
+      "desc": "루프",
+      "extra": "시발점"
     }
-  ],
-  "4": [
+   ],
+  "5": [
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/AFC/AFC1.png",
       "desc": "AFC",
@@ -567,7 +554,7 @@
       ]
     }
   ],
-  "5": [
+  "6": [
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/Friend/Friend_1.jpeg",
       "desc": "크럼블",
@@ -611,7 +598,7 @@
       "extra": "시초의 세계"
     }
   ],
-  "6": [
+  "7": [
     {
       "src": "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev/AF/BeforeTheWorld/BTW_13.jpeg",
       "desc": "약방님",

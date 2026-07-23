@@ -1,0 +1,16 @@
+name = "adelflo-api"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+# 이미 쓰고 있는 R2 버킷 이름을 bucket_name 에 넣어주세요.
+# (버킷 이름은 Cloudflare 대시보드 > R2 에서 확인 가능. 퍼블릭 도메인이
+#  pub-a82833c98a254446bf65db1f16fa9b05.r2.dev 라면, 그 버킷의 원래 이름을 적으면 됩니다.)
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "img"
+
+# 관리자 비밀번호는 secret으로 등록합니다. (이 파일에 직접 적지 마세요)
+# 터미널에서: npx wrangler secret put ADMIN_PASSWORD
+
+[vars]
+PUBLIC_BASE_URL = "https://pub-a82833c98a254446bf65db1f16fa9b05.r2.dev"

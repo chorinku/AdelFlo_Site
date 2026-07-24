@@ -101,6 +101,47 @@
   .group-status{ font-size:12px; margin-top:6px; color:var(--ink-soft); }
   .group-status.ok{ color:var(--pine); font-weight:600; }
   .group-status.err{ color:#b04a3a; font-weight:600; }
+
+  /* ---------- 기존 이미지 관리: 썸네일 그리드 ---------- */
+  .manage-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap:8px;
+  }
+  .manage-thumb{
+    border:2px solid var(--line); border-radius:10px; overflow:hidden;
+    cursor:pointer; background:#fff; transition:border-color .15s ease, transform .15s ease;
+    position:relative;
+  }
+  .manage-thumb:hover{ transform:translateY(-2px); border-color:var(--clay-soft); }
+  .manage-thumb.selected{ border-color:var(--pine); }
+  .manage-thumb img{ width:100%; height:64px; object-fit:cover; display:block; }
+  .manage-thumb .cap{
+    font-size:9.5px; color:var(--ink-soft); text-align:center; padding:3px 4px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .manage-thumb .m-count{
+    position:absolute; top:3px; right:3px; background:rgba(30,26,18,0.7); color:#fff;
+    font-size:9px; font-weight:700; padding:1px 5px; border-radius:20px;
+  }
+  .manage-editor{
+    margin-top:16px; border-top:1px dashed var(--line); padding-top:16px;
+  }
+  .manage-editor-close{
+    border:none; background:transparent; color:var(--ink-soft); font-size:12px;
+    cursor:pointer; text-decoration:underline; margin-bottom:10px;
+  }
+
+  /* ---------- 변경 기록(백업) 목록 ---------- */
+  .backup-row{
+    display:flex;align-items:center;justify-content:space-between;
+    border:1px solid var(--line);border-radius:8px;padding:8px 12px;
+    font-size:12.5px;background:#fff;
+  }
+  .backup-row button{
+    border:none;background:var(--pine);color:#fff;font-size:11.5px;font-weight:600;
+    padding:6px 12px;border-radius:6px;cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -125,6 +166,25 @@
 
     <button class="primary" id="upload-all-btn" disabled>전체 업로드</button>
     <div class="log" id="upload-log"></div>
+
+    <div class="card" style="margin-top:28px;">
+      <label style="margin-bottom:2px;">기존 이미지 관리</label>
+      <p class="hint" style="margin-top:0;">
+        탭을 고르면 그 탭에 등록된 항목들이 나와요. 제목/설명을 고치거나, 사진을 추가/삭제하거나,
+        항목 전체를 지울 수 있어요.
+      </p>
+      <select id="manage-tab-select"></select>
+      <div id="manage-list" style="margin-top:16px;"></div>
+    </div>
+
+    <div class="card" style="margin-top:28px;">
+      <label style="margin-bottom:2px;">변경 기록 (자동 백업)</label>
+      <p class="hint" style="margin-top:0;">
+        업로드/수정/삭제할 때마다 그 직전 상태가 자동으로 저장됩니다. 문제가 생기면 원하는 시점으로 되돌릴 수 있어요.
+      </p>
+      <button id="refresh-backups-btn" style="width:auto;padding:8px 14px;font-size:12.5px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;">목록 새로고침</button>
+      <div id="backup-list" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
   </div>
 </div>
 
@@ -373,6 +433,305 @@ uploadAllBtn.addEventListener('click', async ()=>{
   uploadLog.textContent += (uploadLog.textContent ? "\n" : "") + "처리 완료. 갤러리에서 새로고침하면 반영됩니다.";
   uploadAllBtn.disabled = groups.length === 0;
 });
+
+// ---------- 기존 이미지 관리 (썸네일 그리드 + 클릭해서 수정) ----------
+const manageTabSelect = document.getElementById('manage-tab-select');
+const manageListEl = document.getElementById('manage-list');
+
+manageTabSelect.innerHTML = TAB_OPTIONS.map(o=> `<option value="${o.v}">${o.label}</option>`).join("");
+manageTabSelect.addEventListener('change', ()=> loadManageTab(manageTabSelect.value));
+
+let manageTab = manageTabSelect.value;
+let manageEntries = [];   // 현재 탭의 항목들 (desc/extra는 여기서 바로 수정)
+let manageImages = [];    // manageImages[i] = [{src,extra}, ...] (0번째 = 메인)
+let openEditorIdx = null; // 지금 펼쳐져 있는 항목의 인덱스 (없으면 null)
+
+// R2 URL에서 "폴더" 부분을 뽑아낸다 (새 이미지 추가할 때 같은 폴더에 넣기 위함)
+function guessFolder(src){
+  try{
+    const path = new URL(src).pathname.replace(/^\/+/, "");
+    const parts = path.split("/");
+    parts.pop(); // 파일명 제거
+    return parts.join("/") || "misc";
+  }catch(e){ return "misc"; }
+}
+
+async function loadManageTab(tab){
+  manageTab = tab;
+  openEditorIdx = null;
+  manageListEl.innerHTML = `<div class="hint">불러오는 중...</div>`;
+  try{
+    const res = await fetch(`${API_BASE}/api/gallery`, { cache:'no-store' });
+    const gallery = await res.json();
+    manageEntries = (gallery[tab] || []).map(e=> ({ ...e }));
+    manageImages = manageEntries.map(e=> [
+      { src:e.src, extra:"" },
+      ...((e.extraImages || []).map(x=> ({ src:x.src, extra:x.extra || "" })))
+    ]);
+    renderManageList();
+  }catch(e){
+    manageListEl.innerHTML = `<div class="hint" style="color:#b04a3a;">불러오기 실패: ${e.message}</div>`;
+  }
+}
+
+// 그리드(작은 미리보기들)와, 열려있으면 그 아래 수정 패널을 그린다
+function renderManageList(){
+  manageListEl.innerHTML = "";
+
+  if(!manageEntries.length){
+    manageListEl.innerHTML = `<div class="hint">이 탭엔 아직 항목이 없습니다.</div>`;
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'manage-grid';
+  manageEntries.forEach((entry, idx)=>{
+    const imgs = manageImages[idx];
+    const thumb = document.createElement('div');
+    thumb.className = 'manage-thumb' + (openEditorIdx === idx ? ' selected' : '');
+    thumb.innerHTML = `
+      <img src="${imgs[0].src}">
+      ${imgs.length > 1 ? `<span class="m-count">+${imgs.length}</span>` : ''}
+      <div class="cap">${entry.desc || '(제목 없음)'}</div>
+    `;
+    thumb.addEventListener('click', ()=>{
+      openEditorIdx = (openEditorIdx === idx) ? null : idx;
+      renderManageList();
+    });
+    grid.appendChild(thumb);
+  });
+  manageListEl.appendChild(grid);
+
+  if(openEditorIdx !== null){
+    manageListEl.appendChild(renderManageEditor(openEditorIdx));
+    // 방금 연 편집 패널로 스크롤
+    manageListEl.lastChild.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+}
+
+// 선택된 항목 하나의 수정 패널을 만든다
+function renderManageEditor(idx){
+  const entry = manageEntries[idx];
+  const imgs = manageImages[idx];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'manage-editor';
+  wrap.innerHTML = `
+    <button class="manage-editor-close">← 목록으로 닫기</button>
+    <div class="group-head">
+      <span class="badge">#${idx+1} · 사진 ${imgs.length}장</span>
+      <div>
+        <button class="m-save" style="border:none;background:var(--pine);color:#fff;font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;margin-right:6px;">저장</button>
+        <button class="m-delete" style="border:none;background:transparent;color:#b04a3a;font-size:12px;cursor:pointer;font-weight:600;">항목 삭제</button>
+      </div>
+    </div>
+    <label>제목</label>
+    <input type="text" class="m-desc" value="${entry.desc || ''}">
+    <label>설명</label>
+    <textarea class="m-extra">${entry.extra || ''}</textarea>
+    <label>이미지 (첫 번째=메인)</label>
+    <div class="image-strip m-strip"></div>
+    <div class="group-status m-status"></div>
+  `;
+
+  wrap.querySelector('.manage-editor-close').addEventListener('click', ()=>{
+    openEditorIdx = null;
+    renderManageList();
+  });
+  wrap.querySelector('.m-desc').addEventListener('input', e=>{ entry.desc = e.target.value; });
+  wrap.querySelector('.m-extra').addEventListener('input', e=>{ entry.extra = e.target.value; });
+
+  const strip = wrap.querySelector('.m-strip');
+  imgs.forEach((img, ii)=>{
+    const slot = document.createElement('div');
+    slot.className = 'image-slot' + (ii===0 ? ' main' : '');
+    slot.innerHTML = `
+      ${ii===0 ? '<span class="main-tag">메인</span>' : ''}
+      <img src="${img.src}">
+      ${ii===0 ? '' : `<input type="text" class="m-img-extra" value="${img.extra}" placeholder="이 사진 설명">`}
+      <div class="slot-actions">
+        ${ii!==0 ? `<button class="m-set-main">메인으로</button>` : ''}
+        <button class="m-remove-img">삭제</button>
+      </div>
+    `;
+    if(ii!==0){
+      slot.querySelector('.m-img-extra').addEventListener('input', e=>{ img.extra = e.target.value; });
+      slot.querySelector('.m-set-main').addEventListener('click', ()=>{
+        const [picked] = imgs.splice(ii, 1);
+        imgs.unshift(picked);
+        renderManageList();
+      });
+    }
+    slot.querySelector('.m-remove-img').addEventListener('click', ()=>{
+      if(imgs.length <= 1){
+        alert('최소 1장(메인 이미지)은 남아있어야 해요. 항목 자체를 지우려면 "항목 삭제"를 눌러주세요.');
+        return;
+      }
+      imgs.splice(ii, 1);
+      renderManageList();
+    });
+    strip.appendChild(slot);
+  });
+
+  const addMore = document.createElement('div');
+  addMore.className = 'add-more';
+  addMore.textContent = '+ 이미지 추가';
+  addMore.addEventListener('click', ()=> addManageImages(idx, wrap));
+  strip.appendChild(addMore);
+
+  wrap.querySelector('.m-save').addEventListener('click', ()=> saveManageEntry(idx, wrap));
+  wrap.querySelector('.m-delete').addEventListener('click', ()=> deleteManageEntry(idx));
+
+  return wrap;
+}
+
+function addManageImages(idx, editorEl){
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+  input.addEventListener('change', async ()=>{
+    const files = [...input.files].filter(f=> f.type.startsWith('image/'));
+    if(!files.length) return;
+    const statusEl = editorEl.querySelector('.m-status');
+    const folder = guessFolder(manageImages[idx][0].src);
+    for(const file of files){
+      statusEl.textContent = `이미지 업로드 중... (${file.name})`;
+      statusEl.className = 'group-status m-status';
+      try{
+        const url = await uploadFile(file, folder);
+        manageImages[idx].push({ src: url, extra: "" });
+      }catch(e){
+        if(e.message === "UNAUTHORIZED"){ location.href = './login.html'; return; }
+        statusEl.textContent = "업로드 실패: " + e.message;
+        statusEl.classList.add('err');
+        return;
+      }
+    }
+    renderManageList();
+  });
+  input.click();
+}
+
+async function saveManageEntry(idx, editorEl){
+  const statusEl = editorEl.querySelector('.m-status');
+  statusEl.textContent = "저장 중...";
+  statusEl.className = 'group-status m-status';
+  const imgs = manageImages[idx];
+  const entry = {
+    src: imgs[0].src,
+    desc: manageEntries[idx].desc || "",
+    extra: manageEntries[idx].extra || "",
+  };
+  if(imgs.length > 1){
+    entry.extraImages = imgs.slice(1).map(i=> ({ src: i.src, extra: i.extra || "" }));
+  }
+  try{
+    const res = await fetch(`${API_BASE}/api/update-entry`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ tab: manageTab, index: idx, entry })
+    });
+    if(res.status === 401){ location.href = './login.html'; return; }
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '저장 실패');
+    statusEl.textContent = "저장됨!";
+    statusEl.classList.add('ok');
+  }catch(e){
+    statusEl.textContent = "저장 실패: " + e.message;
+    statusEl.classList.add('err');
+  }
+}
+
+async function deleteManageEntry(idx){
+  const entry = manageEntries[idx];
+  const ok = confirm(`"${entry.desc || '(제목 없음)'}" 항목을 삭제할까요?\n(사진 파일 자체는 R2에 남고, 목록에서만 사라집니다)`);
+  if(!ok) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ tab: manageTab, index: idx })
+    });
+    if(res.status === 401){ location.href = './login.html'; return; }
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '삭제 실패');
+    loadManageTab(manageTab); // 인덱스가 밀리므로 새로 불러오기
+  }catch(e){
+    alert('삭제 실패: ' + e.message);
+  }
+}
+
+loadManageTab(manageTab);
+
+// ---------- 변경 기록 (자동 백업) ----------
+const backupListEl = document.getElementById('backup-list');
+const refreshBackupsBtn = document.getElementById('refresh-backups-btn');
+
+function formatDate(iso){
+  const d = new Date(iso);
+  return d.toLocaleString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+async function loadBackups(){
+  backupListEl.innerHTML = `<div class="hint">불러오는 중...</div>`;
+  try{
+    const res = await fetch(`${API_BASE}/api/backups`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if(res.status === 401){ location.href = './login.html'; return; }
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '조회 실패');
+
+    if(!data.backups.length){
+      backupListEl.innerHTML = `<div class="hint">아직 백업이 없습니다. (첫 업로드/수정/삭제 이후부터 생깁니다)</div>`;
+      return;
+    }
+
+    backupListEl.innerHTML = "";
+    data.backups.forEach(b=>{
+      const row = document.createElement('div');
+      row.className = 'backup-row';
+      row.innerHTML = `
+        <span>${formatDate(b.uploaded)}</span>
+        <button data-key="${b.key}" data-when="${formatDate(b.uploaded)}">이 시점으로 복원</button>
+      `;
+      backupListEl.appendChild(row);
+    });
+
+    backupListEl.querySelectorAll('button[data-key]').forEach(btn=>{
+      btn.addEventListener('click', ()=> restoreBackup(btn.dataset.key, btn.dataset.when, btn));
+    });
+  }catch(e){
+    backupListEl.innerHTML = `<div class="hint" style="color:#b04a3a;">불러오기 실패: ${e.message}</div>`;
+  }
+}
+
+async function restoreBackup(key, whenText, btn){
+  const ok = confirm(`${whenText} 시점으로 되돌릴까요?\n지금 상태는 자동으로 백업된 뒤 되돌아갑니다.`);
+  if(!ok) return;
+  btn.disabled = true;
+  btn.textContent = "복원 중...";
+  try{
+    const res = await fetch(`${API_BASE}/api/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ key })
+    });
+    if(res.status === 401){ location.href = './login.html'; return; }
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '복원 실패');
+    alert('복원되었습니다. 갤러리 페이지에서 새로고침해 확인해보세요.');
+    loadBackups();
+    loadManageTab(manageTab);
+  }catch(e){
+    alert('복원 실패: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = "이 시점으로 복원";
+  }
+}
+
+refreshBackupsBtn.addEventListener('click', loadBackups);
+loadBackups();
+
 </script>
 </body>
 </html>

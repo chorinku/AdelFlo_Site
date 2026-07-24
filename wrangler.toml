@@ -7,7 +7,7 @@ compatibility_date = "2026-07-01"
 #  pub-a82833c98a254446bf65db1f16fa9b05.r2.dev 라면, 그 버킷의 원래 이름을 적으면 됩니다.)
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "img"
+BUCKET = "img"
 
 # 관리자 비밀번호는 secret으로 등록합니다. 
 # 터미널에서: npx wrangler secret put ADMIN_PASSWORD

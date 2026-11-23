@@ -97,6 +97,7 @@
     font-size:11px; cursor:pointer; text-align:center; padding:6px;
   }
   .add-more:hover{ border-color:var(--clay); color:var(--clay); }
+  .add-more.drag{ border-color:var(--clay); background:rgba(124,58,237,0.08); color:var(--clay); }
 
   .group-status{ font-size:12px; margin-top:6px; color:var(--ink-soft); }
   .group-status.ok{ color:var(--pine); font-weight:600; }
@@ -134,10 +135,13 @@
 
   /* ---------- 변경 기록(백업) 목록 ---------- */
   .backup-row{
-    display:flex;align-items:center;justify-content:space-between;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
     border:1px solid var(--line);border-radius:8px;padding:8px 12px;
     font-size:12.5px;background:#fff;
   }
+  .backup-row .backup-info{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .backup-row .backup-date{ color:var(--ink-soft); font-size:11px; }
+  .backup-row .backup-action{ color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .backup-row button{
     border:none;background:var(--pine);color:#fff;font-size:11.5px;font-weight:600;
     padding:6px 12px;border-radius:6px;cursor:pointer;
@@ -205,6 +209,15 @@ const TAB_OPTIONS = [
   {v:"1", label:"오리지널"}, {v:"2", label:"시초의 세계"}, {v:"3", label:"하드모드"},{v:"4", label:"루크스 프로젝트"},
   {v:"5", label:"잡탕"}, {v:"6", label:"Friend"}, {v:"7", label:"출처 표기용"},
 ];
+// R2 저장 폴더 목록 (AF/ 아래 하위 폴더들)
+const FOLDER_OPTIONS = [
+  "AF/AFC", "AF/BeforeTheWorld", "AF/HardMode", "AF/LUX_Project", "AF/Original", "AF/Utopia",
+];
+const CUSTOM_FOLDER = "__custom__";
+function tabName(v){
+  const found = TAB_OPTIONS.find(o=> o.v === String(v));
+  return found ? found.label : `탭 ${v}`;
+}
 
 let token = sessionStorage.getItem('adelflo_admin_pw') || "";
 let groups = []; // { id, tab, folder, desc, extra, images:[{file,url,extra,previewUrl}], status }
@@ -237,7 +250,7 @@ function createGroup(fileList){
   if(!files.length) return;
   const id = ++groupSeq;
   groups.push({
-    id, tab: "1", folder: "misc", desc: "", extra: "",
+    id, tab: "1", folder: "AF/Original", desc: "", extra: "",
     images: files.map(file=> ({ file, extra: "", previewUrl: URL.createObjectURL(file) })),
     status: ""
   });
@@ -256,6 +269,11 @@ function renderGroups(){
       `<option value="${o.v}" ${o.v===g.tab?'selected':''}>${o.label}</option>`
     ).join("");
 
+    const isCustomFolder = !FOLDER_OPTIONS.includes(g.folder);
+    const folderOptionsHTML = FOLDER_OPTIONS.map(f=>
+      `<option value="${f}" ${f===g.folder?'selected':''}>${f}</option>`
+    ).join("") + `<option value="${CUSTOM_FOLDER}" ${isCustomFolder?'selected':''}>직접 입력…</option>`;
+
     card.innerHTML = `
       <div class="group-head">
         <span class="badge">묶음 ${gi+1} · 사진 ${g.images.length}장</span>
@@ -269,7 +287,8 @@ function renderGroups(){
         </div>
         <div>
           <label>저장 폴더 (R2 내부 경로)</label>
-          <input type="text" data-gid="${g.id}" data-field="folder" value="${g.folder}" placeholder="예: AF/Original">
+          <select class="folder-select" data-gid="${g.id}">${folderOptionsHTML}</select>
+          <input type="text" class="folder-custom" data-gid="${g.id}" data-field="folder" value="${isCustomFolder ? g.folder : ''}" placeholder="예: AF/Original" style="display:${isCustomFolder ? 'block' : 'none'};">
         </div>
       </div>
 
@@ -323,6 +342,23 @@ function renderGroups(){
     el.addEventListener('input', ()=>{
       const g = findGroup(Number(el.dataset.gid));
       if(g) g[el.dataset.field] = el.value;
+    });
+  });
+  // 저장 폴더 선택
+  groupsEl.querySelectorAll('.folder-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const g = findGroup(Number(sel.dataset.gid));
+      if(!g) return;
+      const customInput = sel.parentElement.querySelector('.folder-custom');
+      if(sel.value === CUSTOM_FOLDER){
+        g.folder = "";
+        customInput.value = "";
+        customInput.style.display = 'block';
+        customInput.focus();
+      }else{
+        g.folder = sel.value;
+        customInput.style.display = 'none';
+      }
     });
   });
   // 개별 이미지 설명
@@ -409,7 +445,7 @@ uploadAllBtn.addEventListener('click', async ()=>{
       const res = await fetch(`${API_BASE}/api/add-entry`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tab: g.tab, entry })
+        body: JSON.stringify({ tab: g.tab, entry, action: `${tabName(g.tab)} · 항목 추가: ${entry.desc || "(제목 없음)"}` })
       });
       if(res.status === 401) throw new Error("UNAUTHORIZED");
       const data = await res.json();
@@ -575,8 +611,15 @@ function renderManageEditor(idx){
 
   const addMore = document.createElement('div');
   addMore.className = 'add-more';
-  addMore.textContent = '+ 이미지 추가';
-  addMore.addEventListener('click', ()=> addManageImages(idx, wrap));
+  addMore.textContent = '+ 이미지 추가 (드래그 가능)';
+  addMore.addEventListener('click', ()=> pickManageImages(idx, wrap));
+  ['dragenter','dragover'].forEach(evt=>{
+    addMore.addEventListener(evt, e=>{ e.preventDefault(); addMore.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(evt=>{
+    addMore.addEventListener(evt, e=>{ e.preventDefault(); addMore.classList.remove('drag'); });
+  });
+  addMore.addEventListener('drop', e=> addManageImages(idx, wrap, e.dataTransfer.files));
   strip.appendChild(addMore);
 
   wrap.querySelector('.m-save').addEventListener('click', ()=> saveManageEntry(idx, wrap));
@@ -585,30 +628,32 @@ function renderManageEditor(idx){
   return wrap;
 }
 
-function addManageImages(idx, editorEl){
+function pickManageImages(idx, editorEl){
   const input = document.createElement('input');
   input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
-  input.addEventListener('change', async ()=>{
-    const files = [...input.files].filter(f=> f.type.startsWith('image/'));
-    if(!files.length) return;
-    const statusEl = editorEl.querySelector('.m-status');
-    const folder = guessFolder(manageImages[idx][0].src);
-    for(const file of files){
-      statusEl.textContent = `이미지 업로드 중... (${file.name})`;
-      statusEl.className = 'group-status m-status';
-      try{
-        const url = await uploadFile(file, folder);
-        manageImages[idx].push({ src: url, extra: "" });
-      }catch(e){
-        if(e.message === "UNAUTHORIZED"){ location.href = './login.html'; return; }
-        statusEl.textContent = "업로드 실패: " + e.message;
-        statusEl.classList.add('err');
-        return;
-      }
-    }
-    renderManageList();
-  });
+  input.addEventListener('change', ()=> addManageImages(idx, editorEl, input.files));
   input.click();
+}
+
+async function addManageImages(idx, editorEl, fileList){
+  const files = [...fileList].filter(f=> f.type.startsWith('image/'));
+  if(!files.length) return;
+  const statusEl = editorEl.querySelector('.m-status');
+  const folder = guessFolder(manageImages[idx][0].src);
+  for(const file of files){
+    statusEl.textContent = `이미지 업로드 중... (${file.name})`;
+    statusEl.className = 'group-status m-status';
+    try{
+      const url = await uploadFile(file, folder);
+      manageImages[idx].push({ src: url, extra: "" });
+    }catch(e){
+      if(e.message === "UNAUTHORIZED"){ location.href = './login.html'; return; }
+      statusEl.textContent = "업로드 실패: " + e.message;
+      statusEl.classList.add('err');
+      return;
+    }
+  }
+  renderManageList();
 }
 
 async function saveManageEntry(idx, editorEl){
@@ -628,7 +673,7 @@ async function saveManageEntry(idx, editorEl){
     const res = await fetch(`${API_BASE}/api/update-entry`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ tab: manageTab, index: idx, entry })
+      body: JSON.stringify({ tab: manageTab, index: idx, entry, action: `${tabName(manageTab)} · #${idx+1} 수정: ${entry.desc || "(제목 없음)"}` })
     });
     if(res.status === 401){ location.href = './login.html'; return; }
     const data = await res.json();
@@ -649,7 +694,7 @@ async function deleteManageEntry(idx){
     const res = await fetch(`${API_BASE}/api/delete`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ tab: manageTab, index: idx })
+      body: JSON.stringify({ tab: manageTab, index: idx, action: `${tabName(manageTab)} · #${idx+1} 삭제: ${entry.desc || "(제목 없음)"}` })
     });
     if(res.status === 401){ location.href = './login.html'; return; }
     const data = await res.json();
@@ -691,7 +736,10 @@ async function loadBackups(){
       const row = document.createElement('div');
       row.className = 'backup-row';
       row.innerHTML = `
-        <span>${formatDate(b.uploaded)}</span>
+        <div class="backup-info">
+          <span class="backup-action">${b.action || '(설명 없음)'}</span>
+          <span class="backup-date">${formatDate(b.uploaded)}</span>
+        </div>
         <button data-key="${b.key}" data-when="${formatDate(b.uploaded)}">이 시점으로 복원</button>
       `;
       backupListEl.appendChild(row);
